@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PA1 숙제 제출</title>
+<link href="https://fonts.googleapis.com/css2?family=Schoolbell&family=Poor+Story&family=Gugi&display=swap" rel="stylesheet">
+
+<!--
+ ╔══════════════════════════════════════════════════════════════╗
+ ║   PA1 숙제 제출 & 선생님 대시보드                              ║
+ ╠══════════════════════════════════════════════════════════════╣
+ ║  SETUP — 아래 순서대로 진행해줘:                               ║
+ ║                                                              ║
+ ║  1) Firebase Console → 새 프로젝트 생성                        ║
+ ║  2) Firestore Database 활성화 (테스트 모드)                    ║
+ ║     ※ Storage는 필요 없어! Firestore만 쓰면 돼 ✅              ║
+ ║  3) 프로젝트 설정 → 앱 추가(웹) → Config 복사                  ║
+ ║  4) 아래 FIREBASE_CONFIG에 붙여넣기                            ║
+ ║  5) CLASS_CODE, TEACHER_PW 원하는 값으로 변경                  ║
+ ║                                                              ║
+ ║  Firestore 보안 규칙 (테스트용):                               ║
+ ║    match /{document=**} { allow read, write: if true; }      ║
+ ║                                                              ║
+ ║  💡 사진은 브라우저에서 자동 압축 후 Firestore에 직접 저장!     ║
+ ║     Firebase Storage 불필요 (무료 Spark 플랜 OK)              ║
+ ╚══════════════════════════════════════════════════════════════╝
+-->
+
+<style>
+/* ── 토큰 ──────────────────────────────────────────────── */
+:root {
+  --bg:      #f5f4f0;
+  --paper:   #fdfcf9;
+  --ink:     #1c1c1c;
+  --ink2:    #5a5a54;
+  --ink3:    #9a9990;
+  --line:    #ccc9c0;
+  --acc:     #4a7a6a;
+  --acc-bdr: #376055;
+  --err:     #bf5050;
+  --sh:      rgba(0,0,0,.09);
+
+  /* 삐뚤빼뚤 스케치 보더 */
+  --r-lg: 2px 12px 3px 10px / 10px 2px 12px 3px;
+  --r-md: 1px 8px 2px 6px  /  6px 1px  8px 2px;
+  --r-sm: 1px 5px 2px 4px  /  4px 1px  5px 2px;
+
+  --fh: 'Gugi', cursive;        /* UI 멘트, 제목, 버튼 */
+  --fb: 'Poor Story', cursive;  /* 이름, 카테고리명 */
+  --fe: 'Schoolbell', cursive;  /* 영어/숫자 */
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--fb);
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+/* ── 페이지 표시 제어 ───────────────────────────────────── */
+.page { display: none; }
+
+/* ── 스케치 보더 ────────────────────────────────────────── */
+.sk  { border: 2px   solid var(--ink); border-radius: var(--r-lg); box-shadow: 3px 4px 0 var(--sh); }
+.sk2 { border: 1.5px solid var(--ink); border-radius: var(--r-md); box-shadow: 2px 3px 0 var(--sh); }
+.sk3 { border: 1.5px solid var(--ink); border-radius: var(--r-sm); box-shadow: 1px 2px 0 var(--sh); }
+
+/* ── 공통 레이아웃 ──────────────────────────────────────── */
+.wrap { max-width: 680px; margin: 0 auto; padding: 20px 16px 60px; }
+h1,h2,h3 { font-family: var(--fh); }
+
+/* ── 버튼 ───────────────────────────────────────────────── */
+.btn {
+  font-family: var(--fh); font-size: 1.05rem; font-weight: 600;
+  padding: 9px 20px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 2px solid var(--ink); border-radius: var(--r-md);
+  background: var(--paper); color: var(--ink);
+  box-shadow: 2px 3px 0 var(--sh);
+  transition: transform .08s, box-shadow .08s;
+}
+.btn:hover  { transform: translate(-1px,-1px); box-shadow: 3px 4px 0 var(--sh); }
+.btn:active { transform: translate(1px,1px);   box-shadow: 1px 1px 0 var(--sh); }
+.btn-dark   { background: var(--ink); color: var(--paper); }
+.btn-acc    { background: var(--acc); color: #fff; border-color: var(--acc-bdr); }
+.btn-ghost  { border-color: var(--line); color: var(--ink2); box-shadow: none; }
+.btn-sm     { font-size: .85rem; padding: 6px 13px; }
+.btn-xs     { font-size: .76rem; padding: 4px 10px; }
+
+/* ── 인풋 ───────────────────────────────────────────────── */
+.inp {
+  font-family: var(--fh); font-size: 1rem; padding: 10px 14px; width: 100%;
+  border: 2px solid var(--ink); border-radius: var(--r-sm);
+  background: var(--paper); color: var(--ink); outline: none;
+  transition: border-color .15s;
+}
+.inp:focus { border-color: var(--acc); }
+select.inp { cursor: pointer; }
+
+/* ── 탑바 ───────────────────────────────────────────────── */
+.topbar { background: var(--ink); color: var(--paper); padding: 18px 16px; }
+.topbar-inner {
+  max-width: 680px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px;
+}
+.topbar h1   { font-family: var(--fe); font-size: 2rem; font-weight: 700; }
+.topbar .sub { font-size: .76rem; opacity: .6; margin-top: 2px; }
+.topbar-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.t-btn {
+  font-family: var(--fh); font-size: .88rem; padding: 5px 13px; cursor: pointer;
+  background: rgba(255,255,255,.13); border: 1.5px solid rgba(255,255,255,.28);
+  border-radius: var(--r-md); color: #fff;
+}
+.t-btn:hover { background: rgba(255,255,255,.22); }
+
+/* ── HOME ───────────────────────────────────────────────── */
+#p-home {
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 34px; padding: 24px;
+}
+.home-title { text-align: center; }
+.home-title h1 { font-family: var(--fe); font-size: 3.4rem; font-weight: 700; letter-spacing: -1.5px; line-height: 1; }
+.home-title p  { color: var(--ink2); margin-top: 6px; font-size: .9rem; }
+.home-cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+.home-card {
+  background: var(--paper); padding: 30px 36px; text-align: center; cursor: pointer;
+  transition: transform .1s, box-shadow .1s; min-width: 148px;
+}
+.home-card:hover { transform: translate(-2px,-3px); box-shadow: 5px 6px 0 var(--sh); }
+.home-card svg { display: block; margin: 0 auto 14px; }
+.home-card h2  { font-size: 1.55rem; font-weight: 700; }
+.home-card p   { font-size: .75rem; color: var(--ink2); margin-top: 4px; }
+
+/* ── 로그인 ─────────────────────────────────────────────── */
+.login-wrap {
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 24px;
+}
+.login-box { background: var(--paper); padding: 34px 36px; width: 100%; max-width: 380px; }
+.login-box h2 { font-size: 1.85rem; margin-bottom: 20px; }
+.fg  { margin-bottom: 15px; }
+.fl  { display: block; font-size: .8rem; font-weight: 600; color: var(--ink2); margin-bottom: 5px; }
+.fh2 { font-size: .7rem; color: var(--ink3); margin-top: 3px; }
+.btn-row { display: flex; gap: 10px; margin-top: 20px; }
+.err-box {
+  margin-top: 12px; padding: 8px 12px;
+  background: #fff0f0; border: 1.5px solid var(--err);
+  border-radius: var(--r-sm); color: var(--err); font-size: .82rem;
+}
+
+/* ── STUDENT DASH ───────────────────────────────────────── */
+.prog-summary {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--paper); padding: 13px 18px; margin-bottom: 20px;
+}
+.prog-label { font-family: var(--fh); font-size: 1.05rem; font-weight: 600; }
+.prog-count { font-family: var(--fh); font-size: 1.5rem; font-weight: 700; color: var(--acc); }
+.prog-count span { font-size: .9rem; color: var(--ink3); }
+
+.cat-group   { margin-bottom: 24px; }
+.grp-title   {
+  font-family: var(--fh); font-size: 1.08rem; font-weight: 600; color: var(--ink2);
+  margin-bottom: 11px; display: flex; align-items: center; gap: 8px;
+}
+.grp-title::after { content: ''; flex: 1; height: 1.5px; background: var(--line); }
+.cat-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+
+.cat-card    { background: var(--paper); padding: 13px; display: flex; flex-direction: column; min-height: 124px; }
+.cat-card.done { border-color: var(--acc); }
+.cat-name    { font-family: var(--fh); font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
+.cat-thumb   { flex: 1; position: relative; }
+.cat-thumb img {
+  width: 100%; height: 76px; object-fit: cover;
+  border-radius: 3px; cursor: pointer; display: block;
+}
+.done-badge {
+  position: absolute; top: 5px; right: 5px;
+  width: 20px; height: 20px; background: var(--acc); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+.cat-empty {
+  flex: 1; border: 1.5px dashed var(--line); border-radius: 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; color: var(--ink3); font-size: .73rem; padding: 8px;
+}
+.cat-act       { margin-top: 7px; }
+.cat-act .btn  { width: 100%; justify-content: center; font-size: .76rem; padding: 5px 8px; }
+
+/* ── TEACHER DASH ───────────────────────────────────────── */
+.period-tag {
+  display: inline-block; background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.28); border-radius: 20px;
+  padding: 3px 11px; font-size: .75rem; margin-top: 5px;
+}
+.stu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(136px,1fr));
+  gap: 11px;
+}
+.stu-card {
+  background: var(--paper); padding: 18px 13px; text-align: center; cursor: pointer;
+  transition: transform .1s, box-shadow .1s;
+}
+.stu-card:hover { transform: translate(-2px,-2px); box-shadow: 4px 5px 0 var(--sh); }
+.stu-card.full  { border-color: var(--acc); }
+.stu-n          { font-family: var(--fh); font-size: 1.16rem; font-weight: 600; margin-bottom: 11px; }
+.stu-big        { font-family: var(--fh); font-size: 1.9rem; font-weight: 700; color: var(--acc); line-height: 1; }
+.stu-denom      { font-size: .73rem; color: var(--ink3); margin-top: 2px; margin-bottom: 9px; }
+.dots           { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.dot            { width: 9px; height: 9px; border-radius: 50%; background: var(--line); border: 1.5px solid var(--line); }
+.dot.on         { background: var(--acc); border-color: var(--acc); }
+
+/* ── TEACHER DETAIL ─────────────────────────────────────── */
+.back-btn {
+  background: none; border: none; cursor: pointer;
+  font-family: var(--fh); font-size: .98rem; color: var(--ink2);
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; margin-bottom: 16px;
+}
+.back-btn:hover { color: var(--ink); }
+.det-name { font-family: var(--fh); font-size: 2.1rem; font-weight: 700; margin-bottom: 20px; }
+.det-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.det-card { background: var(--paper); padding: 12px; min-height: 124px; }
+.det-cat  { font-family: var(--fh); font-size: .98rem; font-weight: 600; margin-bottom: 8px; }
+.det-img  { width: 100%; border-radius: 3px; cursor: zoom-in; display: block; }
+.det-empty {
+  height: 72px; border: 1.5px dashed var(--line); border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink3); font-size: .73rem;
+}
+
+/* ── 모달 ───────────────────────────────────────────────── */
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.88);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9000; padding: 16px;
+}
+.modal img { max-width: 100%; max-height: 90vh; border-radius: 3px; }
+.modal-x {
+  position: fixed; top: 14px; right: 14px;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: rgba(255,255,255,.18); border: none; color: #fff;
+  font-size: 1.2rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── 로딩 ───────────────────────────────────────────────── */
+.ld-overlay {
+  position: fixed; inset: 0; background: rgba(245,244,240,.93); z-index: 8000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 13px;
+}
+.ld-ring {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 3px solid var(--line); border-top-color: var(--acc);
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.ld-text { font-family: var(--fh); font-size: 1.15rem; color: var(--ink2); }
+
+/* ── 설정 배너 (Firebase 미설정시) ─────────────────────── */
+.setup-banner {
+  background: var(--acc); color: #fff;
+  padding: 12px 20px; font-size: .83rem; text-align: center; line-height: 1.5;
+}
+.setup-banner code { background: rgba(0,0,0,.2); padding: 1px 5px; border-radius: 3px; font-size: .8rem; }
+</style>
+</head>
+<body>
+
+<!-- 로딩 오버레이 -->
+<div class="ld-overlay" id="ov-ld" style="display:none">
+  <div class="ld-ring"></div>
+  <div class="ld-text" id="ov-ld-text">잠깐만요...</div>
+</div>
+
+<!-- 사진 모달 -->
+<div class="modal" id="ov-modal" style="display:none" onclick="closeModal()">
+  <button class="modal-x" onclick="event.stopPropagation();closeModal()">✕</button>
+  <img id="modal-img" src="" alt="" onclick="event.stopPropagation()">
+</div>
+
+<!-- 파일 인풋 (숨김) -->
+<input type="file" id="file-input" accept="image/*" style="display:none">
+
+<!-- ══════════════════════════════════════════════
+     HOME
+══════════════════════════════════════════════ -->
+<div id="p-home" class="page">
+  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px;padding:24px">
+    <div class="home-title">
+      <h1>PA1</h1>
+      <p>DYB 동탄1 · 숙제 제출</p>
+    </div>
+
+    <!-- 물결 데코 -->
+    <svg width="160" height="20" viewBox="0 0 160 20" fill="none" style="opacity:.16">
+      <path d="M8 10Q40 3 80 10Q120 17 152 10" stroke="#1c1c1c" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <circle cx="30"  cy="7"  r="2.2" fill="#1c1c1c"/>
+      <circle cx="80"  cy="12" r="2.2" fill="#1c1c1c"/>
+      <circle cx="130" cy="7"  r="2.2" fill="#1c1c1c"/>
+    </svg>
+
+    <div class="home-cards">
+      <!-- 학생 -->
+      <div class="home-card sk" onclick="App.goStudentLogin()">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+          <rect x="8"  y="8" width="36" height="36" rx="3" fill="#f0efe6" stroke="#1c1c1c" stroke-width="2"/>
+          <rect x="8"  y="8" width="8"  height="36" rx="3" fill="#e2e0d5" stroke="#1c1c1c" stroke-width="2"/>
+          <line x1="22" y1="20" x2="38" y2="20" stroke="#aaa9a0" stroke-width="1.5"/>
+          <line x1="22" y1="27" x2="38" y2="27" stroke="#aaa9a0" stroke-width="1.5"/>
+          <line x1="22" y1="34" x2="32" y2="34" stroke="#aaa9a0" stroke-width="1.5"/>
+          <circle cx="12" cy="18" r="1.8" fill="#ccc9c0"/>
+          <circle cx="12" cy="26" r="1.8" fill="#ccc9c0"/>
+          <circle cx="12" cy="34" r="1.8" fill="#ccc9c0"/>
+        </svg>
+        <h2>학생</h2>
+        <p>숙제 사진 제출하기</p>
+      </div>
+
+      <!-- 선생님 -->
+      <div class="home-card sk" onclick="App.goTeacherLogin()">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+          <path d="M26 8L30.5 19L43 19L33 27L37 38L26 31L15 38L19 27L9 19L21.5 19Z"
+                fill="#f0efe6" stroke="#1c1c1c" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="42" cy="10" r="2"   fill="#1c1c1c" opacity=".22"/>
+          <circle cx="10" cy="13" r="1.5" fill="#1c1c1c" opacity=".22"/>
+          <circle cx="43" cy="37" r="1.5" fill="#1c1c1c" opacity=".22"/>
+        </svg>
+        <h2>선생님</h2>
+        <p>제출 현황 확인</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     학생 로그인
+══════════════════════════════════════════════ -->
+<div id="p-student-login" class="page">
+  <div class="login-wrap">
+    <div class="login-box sk">
+      <h2>학생 로그인</h2>
+      <div class="fg">
+        <label class="fl" for="s-name">내 이름</label>
+        <select class="inp" id="s-name">
+          <option value="">-- 이름 선택 --</option>
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl" for="s-code">반 코드</label>
+        <input class="inp" id="s-code" type="text" placeholder="선생님한테 받은 코드 입력">
+        <div class="fh2">모르면 선생님한테 물어봐!</div>
+      </div>
+      <div id="s-err" class="err-box" style="display:none"></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="App.goHome()">← 뒤로</button>
+        <button class="btn btn-dark"  onclick="App.loginStudent()">들어가기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     학생 대시보드
+══════════════════════════════════════════════ -->
+<div id="p-student" class="page">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <h1 id="s-bar-name">이름</h1>
+        <div class="sub">PA1 · DYB 동탄1</div>
+      </div>
+      <div class="topbar-btns">
+        <button class="t-btn" onclick="App.goHome()">로그아웃</button>
+      </div>
+    </div>
+  </div>
+  <div class="wrap" id="s-content"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     선생님 로그인
+══════════════════════════════════════════════ -->
+<div id="p-teacher-login" class="page">
+  <div class="login-wrap">
+    <div class="login-box sk">
+      <h2>선생님 로그인</h2>
+      <div class="fg">
+        <label class="fl" for="t-pw">비밀번호</label>
+        <input class="inp" id="t-pw" type="password" placeholder="비밀번호 입력">
+      </div>
+      <div id="t-err" class="err-box" style="display:none"></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="App.goHome()">← 뒤로</button>
+        <button class="btn btn-dark"  onclick="App.loginTeacher()">들어가기</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     선생님 대시보드
+══════════════════════════════════════════════ -->
+<div id="p-teacher" class="page">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <h1>PA1</h1>
+        <span class="period-tag" id="t-period-tag">숙제 1</span>
+      </div>
+      <div class="topbar-btns">
+        <button class="t-btn" onclick="App.refreshTeacher()">↻ 새로고침</button>
+        <button class="t-btn" onclick="App.newPeriod()">+ 새 숙제</button>
+        <button class="t-btn" style="opacity:.5" onclick="App.goHome()">나가기</button>
+      </div>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="stu-grid" id="t-grid"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     선생님 학생 상세
+══════════════════════════════════════════════ -->
+<div id="p-teacher-detail" class="page">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <h1>PA1</h1>
+    </div>
+  </div>
+  <div class="wrap">
+    <button class="back-btn" onclick="App.backToTeacher()">← 목록으로</button>
+    <div class="det-name" id="t-det-name"></div>
+    <div id="t-det-content"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     FIREBASE + 앱 로직
+══════════════════════════════════════════════ -->
+<script type="module">
+
+/* ─────────────────────────────────────────────
+   🔧 설정 — 여기를 수정해줘!
+   Firebase Console → 프로젝트 설정 → 앱 → Config
+───────────────────────────────────────────── */
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyC711QRoZ7LoB25fZB33EGuqEofEFMZEcE",
+  authDomain:        "jlsizzy.firebaseapp.com",
+  projectId:         "jlsizzy",
+  storageBucket:     "jlsizzy.firebasestorage.app",
+  messagingSenderId: "300116856089",
+  appId:             "1:300116856089:web:9cc0251d94b951b9194988"
+};
+
+const CLASS_CODE  = "PA1";       // 학생들한테 알려줄 반 코드 (대소문자 무시)
+const TEACHER_PW  = "dyb1234";   // ⚠️ 반드시 바꿔줘!
+
+/* ─────────────────────────────────────────────
+   학생 목록 & 카테고리
+───────────────────────────────────────────── */
+const STUDENTS = [
+  "김가온","김무성","김민준","배서진","신동우","오시원",
+  "이승아","이시안","조용우","조휘서","차은유","최지아"
+];
+
+const CAT_GROUPS = [
+  { label:"T-map",           cats:[{id:"tmap",      name:"T-map"},    {id:"listening",  name:"Listening"}] },
+  { label:"G-map",           cats:[{id:"gmap",      name:"G-map"},    {id:"workbook",   name:"Workbook"}]  },
+  { label:"Study Materials", cats:[{id:"grammar",   name:"문법노트"},  {id:"reading",    name:"직독직해"}]  },
+  { label:"기타",             cats:[{id:"error",     name:"오답노트"},  {id:"application",name:"활용"}]     },
+];
+
+const ALL_CATS = CAT_GROUPS.flatMap(g => g.cats); // 8개 총합
+
+/* ─────────────────────────────────────────────
+   Firebase 초기화 (Firestore만! Storage 없음 ✅)
+───────────────────────────────────────────── */
+import { initializeApp } from
+  'https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js';
+import {
+  getFirestore, doc, getDoc, setDoc, getDocs,
+  collection, serverTimestamp
+} from 'https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js';
+
+let db;
+const CONFIGURED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
+
+if (CONFIGURED) {
+  const fbApp = initializeApp(FIREBASE_CONFIG);
+  db = getFirestore(fbApp);
+} else {
+  const banner = document.createElement("div");
+  banner.className = "setup-banner";
+  banner.innerHTML =
+    "⚙️ Firebase 설정이 필요해! 파일 상단의 <code>FIREBASE_CONFIG</code>를 " +
+    "실제 Firebase 프로젝트 설정값으로 바꿔줘. (위 주석 참고)";
+  document.body.prepend(banner);
+}
+
+/* ─────────────────────────────────────────────
+   이미지 압축 (Canvas API — Storage 불필요!)
+   최대 1400px, JPEG 78% → 약 100~200KB base64
+───────────────────────────────────────────── */
+function compressImage(file, maxW = 1400, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = ({ target: { result } }) => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width, h = img.height;
+        if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ─────────────────────────────────────────────
+   상태
+   Firestore 구조:
+     config/currentPeriod: { id, label, createdAt }
+     periods/{periodId}/status/{studentName}: { submitted:[catId,...] }
+     periods/{periodId}/photos/{studentName}_{catId}: { imageData: base64 }
+───────────────────────────────────────────── */
+const S = {
+  studentName:  null,
+  periodId:     null,
+  mySubmitted:  [],     // 학생: 제출한 catId 배열
+  myPhotos:     {},     // 학생: { catId: base64DataUrl }
+  allSubmitted: {},     // 선생님 대시보드: { studentName: [catId,...] }
+  detailPhotos: {},     // 선생님 상세: { catId: base64DataUrl }
+};
+
+/* ─────────────────────────────────────────────
+   UI 헬퍼
+───────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+
+const PAGES = ["home","student-login","student","teacher-login","teacher","teacher-detail"];
+function goTo(p) {
+  PAGES.forEach(x => { const el = $("p-"+x); if (el) el.style.display = "none"; });
+  const el = $("p-"+p);
+  if (el) el.style.display = "block";
+}
+
+function ld(show, txt = "잠깐만요...") {
+  $("ov-ld").style.display    = show ? "flex" : "none";
+  $("ov-ld-text").textContent = txt;
+}
+
+function showErr(id, msg) { const e = $(id); e.textContent = msg; e.style.display = "block"; }
+function hideErr(id)      { $(id).style.display = "none"; }
+
+window.closeModal = () => { $("ov-modal").style.display = "none"; };
+window.openModal  = src => {
+  $("modal-img").src = src;
+  $("ov-modal").style.display = "flex";
+};
+
+/* ─────────────────────────────────────────────
+   숙제 기간 관리
+───────────────────────────────────────────── */
+async function getPeriod() {
+  try {
+    const d = await getDoc(doc(db, "config", "currentPeriod"));
+    if (d.exists()) {
+      S.periodId = d.data().id;
+      return d.data();
+    }
+    // 최초: period-1 생성
+    const p = { id:"period-1", label:"숙제 1", createdAt:serverTimestamp() };
+    await setDoc(doc(db, "config", "currentPeriod"), p);
+    S.periodId = "period-1";
+    return p;
+  } catch(e) {
+    S.periodId = "period-1";
+    return { id:"period-1", label:"숙제 1" };
+  }
+}
+
+/* ─────────────────────────────────────────────
+   데이터 로딩 — 학생용
+   status doc: { submitted: [catId, ...] }
+   photo doc: { imageData: base64, ... }
+───────────────────────────────────────────── */
+async function loadMyData(name, periodId) {
+  // 1) status 문서 (가볍고 빠름)
+  const statusSnap = await getDoc(doc(db, "periods", periodId, "status", name));
+  S.mySubmitted = statusSnap.exists() ? (statusSnap.data().submitted || []) : [];
+
+  // 2) 내 사진들 (각 catId별 별도 문서)
+  S.myPhotos = {};
+  await Promise.all(S.mySubmitted.map(async catId => {
+    const snap = await getDoc(doc(db, "periods", periodId, "photos", `${name}_${catId}`));
+    if (snap.exists()) S.myPhotos[catId] = snap.data().imageData;
+  }));
+}
+
+/* ─────────────────────────────────────────────
+   데이터 로딩 — 선생님 대시보드
+   status만 읽음 (사진 없음 → 빠름!)
+───────────────────────────────────────────── */
+async function loadAllStatuses(periodId) {
+  const snap = await getDocs(collection(db, "periods", periodId, "status"));
+  S.allSubmitted = {};
+  STUDENTS.forEach(n => { S.allSubmitted[n] = []; });
+  snap.forEach(d => {
+    if (S.allSubmitted[d.id] !== undefined)
+      S.allSubmitted[d.id] = d.data().submitted || [];
+  });
+}
+
+/* ─────────────────────────────────────────────
+   데이터 로딩 — 선생님 학생 상세 (lazy load)
+   한 학생 클릭 시에만 사진 로드
+───────────────────────────────────────────── */
+async function loadDetailPhotos(name, periodId) {
+  const submitted = S.allSubmitted[name] || [];
+  S.detailPhotos = {};
+  await Promise.all(submitted.map(async catId => {
+    const snap = await getDoc(doc(db, "periods", periodId, "photos", `${name}_${catId}`));
+    if (snap.exists()) S.detailPhotos[catId] = snap.data().imageData;
+  }));
+}
+
+/* ─────────────────────────────────────────────
+   렌더: 학생 대시보드
+───────────────────────────────────────────── */
+function renderStudent() {
+  const n     = S.mySubmitted.length;
+  const total = ALL_CATS.length;
+
+  let html = `
+    <div class="prog-summary sk2" style="margin-bottom:20px">
+      <div class="prog-label">이번 숙제 현황</div>
+      <div class="prog-count">${n}<span> / ${total}</span></div>
+    </div>`;
+
+  CAT_GROUPS.forEach(g => {
+    html += `
+      <div class="cat-group">
+        <div class="grp-title">${g.label}</div>
+        <div class="cat-grid">`;
+
+    g.cats.forEach(cat => {
+      const isDone = S.mySubmitted.includes(cat.id);
+      const imgData = S.myPhotos[cat.id];
+
+      if (isDone && imgData) {
+        // 제출됨 + 사진 있음
+        html += `
+          <div class="cat-card sk done">
+            <div class="cat-name">${cat.name}</div>
+            <div class="cat-thumb">
+              <img src="${imgData}" onclick="openModal(this.src)">
+              <div class="done-badge">
+                <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+                  <path d="M2 5.5L4.5 8L9 3" stroke="#fff" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+            </div>
+            <div class="cat-act">
+              <button class="btn btn-ghost btn-xs"
+                      onclick="App.upload('${cat.id}','${cat.name}')">다시 올리기</button>
+            </div>
+          </div>`;
+      } else {
+        // 미제출
+        html += `
+          <div class="cat-card sk2">
+            <div class="cat-name">${cat.name}</div>
+            <div class="cat-empty">
+              <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+                <rect x="2.5" y="7" width="21" height="14" rx="2"
+                      stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="13" cy="14" r="3.5"
+                        stroke="currentColor" stroke-width="1.5"/>
+                <path d="M9 7L10 4H16L17 7" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              </svg>
+              <span>사진 없음</span>
+            </div>
+            <div class="cat-act">
+              <button class="btn btn-acc btn-xs"
+                      onclick="App.upload('${cat.id}','${cat.name}')">📸 올리기</button>
+            </div>
+          </div>`;
+      }
+    });
+
+    html += `</div></div>`;
+  });
+
+  $("s-content").innerHTML = html;
+}
+
+/* ─────────────────────────────────────────────
+   렌더: 선생님 대시보드
+───────────────────────────────────────────── */
+function renderTeacher() {
+  const total = ALL_CATS.length;
+  let html = "";
+
+  STUDENTS.forEach(name => {
+    const submitted = S.allSubmitted[name] || [];
+    const n         = submitted.length;
+    const isFull    = n === total;
+    const dots      = ALL_CATS.map(c =>
+      `<div class="dot${submitted.includes(c.id) ? " on" : ""}" title="${c.name}"></div>`
+    ).join("");
+
+    html += `
+      <div class="stu-card sk${isFull ? " full" : ""}" onclick="App.showDetail('${name}')">
+        <div class="stu-n">${name}</div>
+        <div class="stu-big">${n}</div>
+        <div class="stu-denom">/ ${total}</div>
+        <div class="dots">${dots}</div>
+      </div>`;
+  });
+
+  $("t-grid").innerHTML = html;
+}
+
+/* ─────────────────────────────────────────────
+   렌더: 학생 상세 (선생님 뷰)
+───────────────────────────────────────────── */
+function renderDetail(name) {
+  const submitted = S.allSubmitted[name] || [];
+  let html = "";
+
+  CAT_GROUPS.forEach(g => {
+    html += `
+      <div class="cat-group">
+        <div class="grp-title">${g.label}</div>
+        <div class="det-grid">`;
+
+    g.cats.forEach(cat => {
+      const imgData = S.detailPhotos[cat.id];
+      html += `
+        <div class="det-card sk2">
+          <div class="det-cat">${cat.name}</div>
+          ${imgData
+            ? `<img class="det-img" src="${imgData}" onclick="openModal(this.src)" loading="lazy">`
+            : `<div class="det-empty">사진 없음</div>`
+          }
+        </div>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  $("t-det-content").innerHTML = html;
+}
+
+/* ─────────────────────────────────────────────
+   사진 업로드
+   압축 → base64 → Firestore에 직접 저장 (setDoc = 항상 덮어쓰기)
+───────────────────────────────────────────── */
+let _up = null; // 업로드 대기 정보
+
+$("file-input").addEventListener("change", async function () {
+  const file = this.files[0];
+  if (!file || !_up) return;
+  this.value = "";
+
+  const { catId, catName } = _up;
+  _up = null;
+
+  ld(true, `${catName} 압축 중...`);
+  try {
+    const name = S.studentName;
+
+    // 1) 이미지 압축 (Canvas API, ~100-200KB)
+    ld(true, `${catName} 올리는 중...`);
+    const imageData = await compressImage(file);
+
+    // 2) Firestore에 사진 저장 (setDoc = 기존 덮어쓰기 OK)
+    await setDoc(
+      doc(db, "periods", S.periodId, "photos", `${name}_${catId}`),
+      { imageData, catName, submittedAt: serverTimestamp() }
+    );
+
+    // 3) status 업데이트 (submitted 배열에 추가 — 중복 방지)
+    if (!S.mySubmitted.includes(catId)) {
+      S.mySubmitted = [...S.mySubmitted, catId];
+    }
+    await setDoc(
+      doc(db, "periods", S.periodId, "status", name),
+      { submitted: S.mySubmitted, updatedAt: serverTimestamp() }
+    );
+
+    // 4) 로컬 상태 업데이트 → 화면 갱신
+    S.myPhotos[catId] = imageData;
+    renderStudent();
+
+  } catch (e) {
+    alert("업로드 실패 😢\n" + e.message);
+  }
+  ld(false);
+});
+
+/* ─────────────────────────────────────────────
+   App 인터페이스 (HTML onclick에서 사용)
+───────────────────────────────────────────── */
+window.App = {
+
+  goHome()         { goTo("home"); },
+  goStudentLogin() { goTo("student-login"); },
+  goTeacherLogin() { goTo("teacher-login"); },
+  backToTeacher()  { goTo("teacher"); },
+
+  /* 학생 로그인 */
+  async loginStudent() {
+    const name = $("s-name").value;
+    const code = $("s-code").value.trim();
+    hideErr("s-err");
+
+    if (!name) { showErr("s-err", "이름을 선택해줘!"); return; }
+    if (code.toUpperCase() !== CLASS_CODE.toUpperCase())
+      { showErr("s-err", "반 코드가 틀렸어! 선생님한테 다시 물어봐 🥹"); return; }
+    if (!CONFIGURED)
+      { alert("Firebase 설정이 먼저 필요해요!\n파일 상단의 FIREBASE_CONFIG를 수정해줘."); return; }
+
+    ld(true, "불러오는 중...");
+    try {
+      const period = await getPeriod();
+      S.studentName = name;
+      await loadMyData(name, period.id);
+      $("s-bar-name").textContent = name;
+      renderStudent();
+      goTo("student");
+    } catch (e) { alert("오류: " + e.message); }
+    ld(false);
+  },
+
+  /* 선생님 로그인 */
+  async loginTeacher() {
+    hideErr("t-err");
+    if ($("t-pw").value !== TEACHER_PW) { showErr("t-err", "비밀번호가 틀렸어요!"); return; }
+    if (!CONFIGURED)
+      { alert("Firebase 설정이 먼저 필요해요!\n파일 상단의 FIREBASE_CONFIG를 수정해줘."); return; }
+
+    ld(true, "불러오는 중...");
+    try {
+      const period = await getPeriod();
+      $("t-period-tag").textContent = period.label || period.id;
+      await loadAllStatuses(period.id);
+      renderTeacher();
+      goTo("teacher");
+    } catch (e) { alert("오류: " + e.message); }
+    ld(false);
+  },
+
+  /* 새로고침 */
+  async refreshTeacher() {
+    ld(true, "새로고침 중...");
+    try {
+      const period = await getPeriod();
+      await loadAllStatuses(period.id);
+      renderTeacher();
+    } catch (e) { alert("오류: " + e.message); }
+    ld(false);
+  },
+
+  /* 새 숙제 기간 시작 */
+  async newPeriod() {
+    if (!confirm("새 숙제 기간을 시작할까요?\n(기존 사진은 그대로 남아있어요 — 현황만 새로 시작돼요)")) return;
+    ld(true, "새 숙제 기간 시작 중...");
+    try {
+      const d = await getDoc(doc(db, "config", "currentPeriod"));
+      let num = 2;
+      if (d.exists()) {
+        const m = (d.data().id || "").match(/period-(\d+)/);
+        if (m) num = parseInt(m[1]) + 1;
+      }
+      const newId    = `period-${num}`;
+      const newLabel = `숙제 ${num}`;
+      await setDoc(doc(db, "config", "currentPeriod"), {
+        id: newId, label: newLabel, createdAt: serverTimestamp()
+      });
+      S.periodId = newId;
+      $("t-period-tag").textContent = newLabel;
+      await loadAllStatuses(newId);
+      renderTeacher();
+    } catch (e) { alert("오류: " + e.message); }
+    ld(false);
+  },
+
+  /* 학생 상세 보기 (사진 lazy load) */
+  async showDetail(name) {
+    ld(true, `${name} 사진 불러오는 중...`);
+    try {
+      await loadDetailPhotos(name, S.periodId);
+      $("t-det-name").textContent = name;
+      renderDetail(name);
+      goTo("teacher-detail");
+    } catch (e) { alert("오류: " + e.message); }
+    ld(false);
+  },
+
+  /* 사진 업로드 트리거 */
+  upload(catId, catName) {
+    _up = { catId, catName };
+    $("file-input").click();
+  }
+};
+
+/* ─────────────────────────────────────────────
+   키보드 단축키 & 초기화
+───────────────────────────────────────────── */
+
+// 엔터로 로그인
+$("s-code").addEventListener("keydown", e => { if (e.key === "Enter") App.loginStudent(); });
+$("t-pw")  .addEventListener("keydown", e => { if (e.key === "Enter") App.loginTeacher(); });
+
+// 학생 이름 드롭다운 채우기
+{
+  const sel = $("s-name");
+  STUDENTS.forEach(n => {
+    const o = document.createElement("option");
+    o.value = o.textContent = n;
+    sel.appendChild(o);
+  });
+}
+
+// 시작
+goTo("home");
+
+</script>
+</body>
+</html>
